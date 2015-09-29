@@ -125,24 +125,26 @@ func (s *Service) LookupPushEndpoints(repoName string) (endpoints []APIEndpoint,
 func (s *Service) lookupEndpoints(repoName string, isPush bool) (endpoints []APIEndpoint, err error) {
 	var cfg = tlsconfig.ServerDefault
 	tlsConfig := &cfg
-	if strings.HasPrefix(repoName, DefaultNamespace+"/") {
-		if !isPush {
-			// v2 mirrors for pull only
-			for _, mirror := range s.Config.Mirrors {
-				mirrorTLSConfig, err := s.tlsConfigForMirror(mirror)
-				if err != nil {
-					return nil, err
-				}
-				endpoints = append(endpoints, APIEndpoint{
-					URL: mirror,
-					// guess mirrors are v2
-					Version:      APIVersion2,
-					Mirror:       true,
-					TrimHostname: true,
-					TLSConfig:    mirrorTLSConfig,
-				})
+	if !isPush {
+		// v2 mirrors for pull only
+		for _, mirror := range s.Config.Mirrors {
+			mirrorTLSConfig, err := s.tlsConfigForMirror(mirror)
+			if err != nil {
+				return nil, err
 			}
+			mirrorTLSConfig.InsecureSkipVerify = true
+			endpoints = append(endpoints, APIEndpoint{
+				URL: mirror,
+				// guess mirrors are v2
+				Version:      APIVersion2,
+				Mirror:       true,
+				TrimHostname: true,
+				TLSConfig:    mirrorTLSConfig,
+			})
 		}
+	}
+	// Special case the official repos
+	if strings.HasPrefix(repoName, DefaultNamespace+"/") {
 		// v2 registry
 		endpoints = append(endpoints, APIEndpoint{
 			URL:          DefaultV2Registry,
@@ -180,22 +182,19 @@ func (s *Service) lookupEndpoints(repoName string, isPush bool) (endpoints []API
 			Version: "2.0",
 		},
 	}
-	endpoints = []APIEndpoint{
-		{
-			URL:           "https://" + hostname,
-			Version:       APIVersion2,
-			TrimHostname:  true,
-			TLSConfig:     tlsConfig,
-			VersionHeader: DefaultRegistryVersionHeader,
-			Versions:      v2Versions,
-		},
-		{
-			URL:          "https://" + hostname,
-			Version:      APIVersion1,
-			TrimHostname: true,
-			TLSConfig:    tlsConfig,
-		},
-	}
+	endpoints = append(endpoints, APIEndpoint{
+		URL:           "https://" + hostname,
+		Version:       APIVersion2,
+		TrimHostname:  true,
+		TLSConfig:     tlsConfig,
+		VersionHeader: DefaultRegistryVersionHeader,
+		Versions:      v2Versions,
+	}, APIEndpoint{
+		URL:          "https://" + hostname,
+		Version:      APIVersion1,
+		TrimHostname: true,
+		TLSConfig:    tlsConfig,
+	})
 
 	if !isSecure {
 		endpoints = append(endpoints, APIEndpoint{
